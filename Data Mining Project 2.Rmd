@@ -18,6 +18,8 @@ library(yardstick)
 library(ROCR)
 library(plotrix)
 library(e1071)
+library(pscl)
+library(ggplot2)
 
 
 ```
@@ -296,9 +298,10 @@ test = test[,2:ncol(test)]
 test2 = params_df[-train_set,]
 test2 = test2[,2:ncol(test2)]
 
+
 ###Building model(s)
 
-m = glm(AMZN_response ~ ., family = binomial(), data = train)
+m = glm(AMZN_response ~ ., family = "binomial", data = train)
 summary(m)
 
 
@@ -313,6 +316,10 @@ m2$aic
 
 ###Chi-square test between models
 anova(m2,m, test = "Chisq")
+
+###Psuedo R
+pR2(m2)
+
 
 #stepwise model - m2 - fits  just as well as our first model, but with fewer parameters
 
@@ -362,6 +369,30 @@ m2_accuracy
 #Using new best cutoff provides better accuracy & efficiency than using 0.5 to factor
 
 
+###K-fold cross validation
+train$AMZN_response = factor(train$AMZN_response)
+test$AMZN_response = factor(test$AMZN_response)
+control = trainControl(method = "repeatedcv", number = 10, savePredictions = TRUE)
+mfit = train(AMZN_response ~ .,  data = train, method="glm", family="binomial",
+                 trControl = control, tuneLength = 5)
+preds = predict(mfit, newdata = test)
+confusionMatrix(data=preds, test$AMZN_response)
+
+predplot = mfit$pred
+predplot$equal = ifelse(predplot$pred == predplot$obs, 1,0)
+
+folds = predplot %>%                                        
+  group_by(Resample) %>%                         
+  summarise_at(vars(equal),                     
+               list(Accuracy = mean))  
+
+ggplot(data = folds, aes(x=Resample, y=Accuracy, group=1)) +
+geom_boxplot(color="dark green") +
+geom_point() +
+theme_minimal() +
+theme(axis.text.x = element_text(angle = 90, vjust = 0.5)) +
+ggtitle("Boxplot of Accuracy by Folds")
+
 ###Recall & precision 
 perf_df = data.frame(observed = factor(test$AMZN_response),
 pred = factor(pred_response_best))
@@ -393,6 +424,10 @@ plot(perf.rocr, colorize=T,
 abline(a = 0, b = 1)
 
 #AUC = 0.6956
+
+
+
+
 
 ###Naive Bayes model:
 
@@ -427,7 +462,7 @@ bayes_accuracy
 
 indicator_df = dplyr::select(params_df, -date)
 
-m3 = stepAIC(glm(AMZN_response ~ ., family = binomial(), data = indicator_df))
+m3 = stepAIC(glm(AMZN_response ~ ., family = "binomial", data = indicator_df))
 summary(m)
 
 indicator_df$indicator_strength = m3$fitted.values
@@ -448,6 +483,8 @@ cor.test(corr_df$indicator_strength, corr_df$Delt.0.arithmetic,
                     method = "pearson")
 
 #Significant correlation between stock strength indicator and daily returns
+
+
 
 ```
 
