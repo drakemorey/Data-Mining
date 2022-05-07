@@ -6,4 +6,4 @@ This project is an attempt to utilize an individual stock (like AMZN or TSLA) al
 
 There are two origins for the data used in the analysis. Firstly, historical data is pulled from Yahoo Finance via the quantmod package in R, and the SPX put/call dataset can be obtained from CBOE: https://www.cboe.com/us/options/market_statistics/historical_data/.
 
-Link to project report:
+Link to project report: https://docs.google.com/document/d/1WFviq9V7qUmxSgy8MPzPieMoc4XTkd9mr9vX9LQgAf4/export?format=pdf
