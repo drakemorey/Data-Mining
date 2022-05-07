@@ -199,8 +199,8 @@ combined$`Put / Call Ratio` = as.numeric(combined$`Put / Call Ratio`)
 combined = left_join(combined, returns_amzn2, by = "date")
 
 
-cor.test(combined$SPY.Close, combined$`Put / Call Ratio`, 
-                    method = "pearson")
+#cor.test(combined$SPY.Close, combined$`Put / Call Ratio`, 
+#                    method = "pearson")
 
 
 cor.test(combined$Delt.0.arithmetic.y, combined$`Put / Call Ratio`, 
@@ -210,9 +210,9 @@ cor.test(combined$Delt.0.arithmetic.y, combined$`Put / Call Ratio`,
 #Significant correlation between SPY daily returns and SPX put/call ratios
 
 
-plot(x = combined$date, y = combined$`Put / Call Ratio`, type = "l", xlab = "Date", ylab = "put/call ratio", main = "SPX Put/Call Ratio")
-abline(h = putcallmean, col = "red")
-lines(x = combined$date, y = combined$Delt.0.arithmetic.y, col='green')
+#plot(x = combined$date, y = combined$`Put / Call Ratio`, type = "l", xlab = "Date", ylab = "put/call ratio", main = "SPX Put/Call Ratio")
+#abline(h = putcallmean, col = "red")
+#lines(x = combined$date, y = combined$Delt.0.arithmetic.y, col='green')
 
 
 twoord.plot(combined$date,combined$`Put / Call Ratio`,combined$date,combined$Delt.0.arithmetic.y,type= c("l", "l"), xaxt = 'n', yaxt = 'n', main = "SPX Put/Call Ratio Overlaid w/ AMZN Daily Returns")
