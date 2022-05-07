@@ -1,0 +1,489 @@
+---
+title: "Data Mining Project 2"
+author: "Drake Morey"
+date: "5/4/2022"
+output: html_document
+---
+
+```{r}
+
+library(quantmod)
+library(tidyr)
+library(tibble)
+library(tidyr)
+library(dplyr)
+library(caret)
+library(MASS)
+library(yardstick)
+library(ROCR)
+library(plotrix)
+library(e1071)
+
+
+```
+
+
+```{r}
+####Pulling stock data via yahoo finance
+start = as.Date("2010-07-06")
+end = as.Date("2019-10-04")
+
+stock_and_etfs = c("AMZN", "QQQ", "SPY", "XLY", "VCR")
+getSymbols(stock_and_etfs, src = "yahoo", from = start, to = end)
+
+AMZN_data = AMZN
+QQQ_data = QQQ
+SPY_data = SPY
+XLY_data = XLY
+VCR_data = VCR
+
+#Historical price plots
+plot(AMZN[, "AMZN.Close"], main = "AMZN")
+plot(QQQ[, "QQQ.Close"], main = "QQQ")
+plot(SPY[, "SPY.Close"], main = "SPY")
+plot(XLY[, "XLY.Close"], main = "XLY")
+plot(VCR[, "VCR.Close"], main = "VCR")
+
+
+#Daily percent returns old:
+#returns_qqq = diff((QQQ[, "QQQ.Close"]))/(QQQ[, "QQQ.Close"][-length(QQQ[, "QQQ.Close"])])
+#returns_amzn = diff((AMZN[, "AMZN.Close"]))/(AMZN[, "AMZN.Close"][-length(AMZN[, "AMZN.Close"])])
+#returns_spy = diff((SPY[, "SPY.Close"]))/(SPY[, "SPY.Close"][-length(SPY[, "SPY.Close"])])
+#returns_xly = diff((XLY[, "XLY.Close"]))/(XLY[, "XLY.Close"][-length(XLY[, "XLY.Close"])])
+#returns_vcr = diff((VCR[, "VCR.Close"]))/(VCR[, "VCR.Close"][-length(VCR[, "VCR.Close"])])
+
+
+#Daily percent returns new:
+returns_qqq = (Delt(QQQ_data$QQQ.Open,QQQ_data$QQQ.Close))*100
+returns_amzn = (Delt(AMZN_data$AMZN.Open,AMZN_data$AMZN.Close))*100
+returns_spy = (Delt(SPY_data$SPY.Open,SPY_data$SPY.Close))*100
+returns_xly = (Delt(XLY_data$XLY.Open,XLY_data$XLY.Close))*100
+returns_vcr = (Delt(VCR_data$VCR.Open,VCR_data$VCR.Close))*100
+
+
+daily_returns = data.frame(returns_amzn, returns_qqq,returns_spy, returns_xly, returns_vcr)
+colnames(daily_returns) = c("AMZN", "QQQ","SPY","XLY","VCR")
+
+#Combined daily percent returns plot
+par(mar=c(5, 4, 4, 8), xpd=TRUE)
+plot(as.zoo(daily_returns), screens = 1, lty = 1:5, xlab = "Date", ylab = "Percent", col = c("red", "blue", "purple", "black", "green"), main = "Daily Percent Returns Across Time")
+legend("topright",inset=c(-0.25, 0), c("AMZN", "QQQ","SPY","XLY","VCR"), lty = 1:5, col = c("red", "blue", "purple", "black", "green"))
+
+#CORR. BETWEEN AMZN AND ETFS (using percent returns)
+daily_returns = daily_returns[2:length(daily_returns), ]
+
+cor(daily_returns)
+
+
+#Highest correlation is with SPY, thus we will use SPX put/call ratios.
+
+
+#More exploratory data analysis:
+meanreturns = sapply(daily_returns, mean)
+varreturns = sapply(daily_returns, var)
+meanreturns
+varreturns
+
+
+###Feature creation
+
+
+#MACD & signal
+
+
+AMZN_MACD = as.data.frame(MACD(AMZN_data$AMZN.Close, nFast = 12, nSlow = 26, nSig = 9, maType = "EMA", percent = TRUE))
+QQQ_MACD = as.data.frame(MACD(QQQ_data$QQQ.Close, nFast = 12, nSlow = 26, nSig = 9, maType = "EMA", percent = TRUE))
+SPY_MACD = as.data.frame(MACD(SPY_data$SPY.Close, nFast = 12, nSlow = 26, nSig = 9, maType = "EMA", percent = TRUE))
+XLY_MACD = as.data.frame(MACD(XLY_data$XLY.Close, nFast = 12, nSlow = 26, nSig = 9, maType = "EMA", percent = TRUE))
+VCR_MACD = as.data.frame(MACD(VCR_data$VCR.Close, nFast = 12, nSlow = 26, nSig = 9, maType = "EMA", percent = TRUE))
+
+plotamzn = dplyr::select(AMZN_MACD,-signal)
+plotqqq = dplyr::select(QQQ_MACD,-signal)
+plotspy = dplyr::select(SPY_MACD,-signal)
+plotxly = dplyr::select(XLY_MACD,-signal)
+plotvcr = dplyr::select(VCR_MACD,-signal)
+
+plotmacd = data.frame(plotamzn,plotqqq,plotspy,plotxly,plotvcr)
+
+par(mar=c(5, 4, 4, 8), xpd=TRUE)
+plot(as.zoo(plotmacd), screens = 1, lty = 1:5, xlab = "Date", ylab = "MACD", col = c("red", "blue", "purple", "black", "green"), main = "MACD by Asset Across Time")
+legend("topright",inset=c(-0.25, 0), c("AMZN", "QQQ","SPY","XLY","VCR"), lty = 1:5, col = c("red", "blue", "purple", "black", "green"))
+
+
+plotamzn2 = dplyr::select(AMZN_MACD,-macd)
+plotqqq2 = dplyr::select(QQQ_MACD,-macd)
+plotspy2 = dplyr::select(SPY_MACD,-macd)
+plotxly2 = dplyr::select(XLY_MACD,-macd)
+plotvcr2 = dplyr::select(VCR_MACD,-macd)
+
+plotsignal = data.frame(plotamzn2,plotqqq2,plotspy2,plotxly2,plotvcr2)
+
+
+
+par(mar=c(5, 4, 4, 8), xpd=TRUE)
+plot(as.zoo(plotmacd), screens = 1, lty = 1:5, xlab = "Date", ylab = "MACD Signal", col = c("red", "blue", "purple", "black", "green"), main = "MACD Signal by Asset Across Time")
+legend("topright",inset=c(-0.25, 0), c("AMZN", "QQQ","SPY","XLY","VCR"), lty = 1:5, col = c("red", "blue", "purple", "black", "green"))
+
+
+
+#William's %R
+wpr_function = function(t) {
+  WPR(t[,2:4])
+}
+
+
+amzn_wpr = wpr_function(AMZN)
+qqq_wpr = wpr_function(QQQ)
+spy_wpr = wpr_function(SPY)
+xly_wpr = wpr_function(XLY)
+vcr_wpr = wpr_function(VCR)
+
+plot(as.zoo(amzn_wpr),lty = 1, xlab = "Date", ylab = "%R", main = "AMZN")
+plot(as.zoo(qqq_wpr),lty = 1, xlab = "Date", ylab = "%R", main = "QQQ")
+plot(as.zoo(spy_wpr),lty = 1, xlab = "Date", ylab = "%R", main = "SPY")
+plot(as.zoo(xly_wpr),lty = 1, xlab = "Date", ylab = "%R", main = "XLY")
+plot(as.zoo(vcr_wpr),lty = 1, xlab = "Date", ylab = "%R", main = "VCR")
+
+
+
+plot_wpr = data.frame(amzn_wpr, qqq_wpr,spy_wpr,xly_wpr,vcr_wpr)
+
+par(mar=c(5, 4, 4, 8), xpd=TRUE)
+plot(as.zoo(plot_wpr), screens = 1, lty = 1:5, xlab = "Date", ylab = "%R", col = c("red", "blue", "purple", "black", "green"), main = "William's %R by Asset Across Time")
+legend("topright",inset=c(-0.25, 0), c("AMZN", "QQQ","SPY","XLY","VCR"), lty = 1:5, col = c("red", "blue", "purple", "black", "green"))
+
+
+
+###SPX put/call ratio data
+
+
+putcall = read.csv(file = 'spxpc.csv')
+putcall$date = putcall$Cboe.Volume.and.Put.Call.Ratio.data.is.provided.for.informational.purposes.only..The.volume.data.reflected.below.may.be.based.upon.preliminary.reported.volume.rather.than.cleared.volume..Cboe.makes.no.guarantee.as.to.the.accuracy.of.the.data..Your.use.of.Cboe.Volume.and.Put.Call.Ratio.data.is.subject.to.the.Terms.and.Conditions.of.the.Cboe.Websites.
+
+putcall = dplyr::select(putcall, X,date)
+colnames(putcall) = c("Put / Call Ratio", "date")
+putcall = putcall[2:length(putcall$date),]
+putcall$date = as.Date(putcall$date, format = "%m/%d/%Y")
+
+putcallmean = mean(as.numeric(putcall$`Put / Call Ratio`))
+putcallvar = var(as.numeric(putcall$`Put / Call Ratio`))
+putcallmean
+putcallvar
+
+
+#Plot put/call ratio
+plot(x = putcall$date, y = putcall$`Put / Call Ratio`, type = "l", xlab = "Date", ylab = "put/call ratio", main = "SPX Put/Call Ratio")
+abline(h = putcallmean, col = "red")
+
+
+
+#Corr between SPY daily returns, and SPX put/call ratio
+
+
+returns_spy = returns_spy[2:length(returns_spy), ]
+returns_spy = as.data.frame(returns_spy)
+returns_spy = tibble::rownames_to_column(returns_spy, "date")
+returns_spy$date = as.Date(returns_spy$date)
+
+returns_amzn2 = returns_amzn[2:length(returns_amzn), ]
+returns_amzn2 = as.data.frame(returns_amzn2)
+returns_amzn2 = tibble::rownames_to_column(returns_amzn2, "date")
+returns_amzn2$date = as.Date(returns_amzn2$date)
+
+
+combined = left_join(returns_spy, putcall, by = "date")
+combined$`Put / Call Ratio` = as.numeric(combined$`Put / Call Ratio`)
+
+combined = left_join(combined, returns_amzn2, by = "date")
+
+
+cor.test(combined$SPY.Close, combined$`Put / Call Ratio`, 
+                    method = "pearson")
+
+
+cor.test(combined$Delt.0.arithmetic.y, combined$`Put / Call Ratio`, 
+                    method = "pearson")
+
+
+#Significant correlation between SPY daily returns and SPX put/call ratios
+
+
+plot(x = combined$date, y = combined$`Put / Call Ratio`, type = "l", xlab = "Date", ylab = "put/call ratio", main = "SPX Put/Call Ratio")
+abline(h = putcallmean, col = "red")
+lines(x = combined$date, y = combined$Delt.0.arithmetic.y, col='green')
+
+
+twoord.plot(combined$date,combined$`Put / Call Ratio`,combined$date,combined$Delt.0.arithmetic.y,type= c("l", "l"), xaxt = 'n', yaxt = 'n', main = "SPX Put/Call Ratio Overlaid w/ AMZN Daily Returns")
+
+###Turning AMZN returns into binary to conduct binary algorithms
+
+amzn_binary = as.data.frame(ifelse(returns_amzn > 0, 1, 0))
+amzn_binary = tibble::rownames_to_column(amzn_binary, "date")
+amzn_binary$date = as.Date(amzn_binary$date)
+colnames(amzn_binary) = c("date", "AMZN_response")
+
+#1 indicates positive return day, 0 indicates negative return day
+
+###Combining features into df
+
+date_function = function(t) {
+  t = tibble::rownames_to_column(t, "date")
+t$date = as.Date(t$date)
+
+return(t)
+  
+}
+
+
+QQQ_MACD = date_function(QQQ_MACD)
+colnames(QQQ_MACD) = c("date", "qqq_macd", "signal")
+QQQ_MACD = dplyr::select(QQQ_MACD, qqq_macd,date)
+SPY_MACD = date_function(SPY_MACD)
+colnames(SPY_MACD) = c("date", "spy_macd", "signal")
+SPY_MACD = dplyr::select(SPY_MACD, spy_macd,date)
+XLY_MACD = date_function(XLY_MACD)
+colnames(XLY_MACD) = c("date", "xly_macd", "signal")
+XLY_MACD = dplyr::select(XLY_MACD, xly_macd,date)
+VCR_MACD = date_function(VCR_MACD)
+colnames(VCR_MACD) = c("date", "vcr_macd", "signal")
+VCR_MACD = dplyr::select(VCR_MACD, vcr_macd,date)
+
+params_df = left_join(amzn_binary, putcall, by = "date")
+params_df = left_join(params_df, QQQ_MACD, by = "date")
+params_df = left_join(params_df, SPY_MACD, by = "date")
+params_df = left_join(params_df, XLY_MACD, by = "date")
+params_df = left_join(params_df, VCR_MACD, by = "date")
+
+
+qqq_wpr = as.data.frame(qqq_wpr)
+spy_wpr = as.data.frame(spy_wpr)
+xly_wpr = as.data.frame(xly_wpr)
+vcr_wpr = as.data.frame(vcr_wpr)
+
+qqq_wpr = date_function(qqq_wpr)
+spy_wpr = date_function(spy_wpr)
+xly_wpr = date_function(xly_wpr)
+vcr_wpr = date_function(vcr_wpr)
+
+colnames(qqq_wpr) = c("date", "qqq_%r")
+colnames(spy_wpr) = c("date", "spy_%r")
+colnames(xly_wpr) = c("date", "xly_%r")
+colnames(vcr_wpr) = c("date", "vcr_%r")
+
+params_df = left_join(params_df, qqq_wpr, by = "date")
+params_df = left_join(params_df, spy_wpr, by = "date")
+params_df = left_join(params_df, xly_wpr, by = "date")
+params_df = left_join(params_df, vcr_wpr, by = "date")
+
+params_df = params_df[complete.cases(params_df), ]
+params_df$`Put / Call Ratio` = as.numeric(params_df$`Put / Call Ratio`)
+
+
+
+###Train/test split
+
+trainsize = floor(.80 * nrow(params_df))
+set.seed(1967)
+
+train_set = sample(seq_len(nrow(params_df)), size = trainsize)
+
+train = params_df[train_set,]
+test = params_df[-train_set,]
+
+train = dplyr::select(train, -date)
+test = test[,2:ncol(test)]
+
+test2 = params_df[-train_set,]
+test2 = test2[,2:ncol(test2)]
+
+###Building model(s)
+
+m = glm(AMZN_response ~ ., family = binomial(), data = train)
+summary(m)
+
+
+#stepwise model dplyr::selection to minimize AIC
+
+m2 = stepAIC(m)
+summary(m2)
+
+m$aic
+m2$aic
+
+
+###Chi-square test between models
+anova(m2,m, test = "Chisq")
+
+#stepwise model - m2 - fits  just as well as our first model, but with fewer parameters
+
+#Predictions & model accuracy
+
+test$pred_response = predict(m2, newdata=test,
+                           type="response")
+test$pred_response = round(test$pred_response)
+
+
+m_table = table(Predicted = test$pred_response, Test = test$AMZN_response)
+m_table
+
+m_accuracy = sum(diag(m_table)) / sum(m_table)
+m_accuracy
+
+#Accuracy curve & optimal cutoff
+pred = predict(m2, newdata=test,
+                           type="response")
+
+roc_curve = prediction(pred, test$AMZN_response)
+evaluation = performance(roc_curve, "acc")
+plot(evaluation, main = "Accuracy vs. Cutoff")
+
+
+max = which.max(slot(evaluation, "y.values")[[1]])
+accuracy = slot(evaluation, "y.values")[[1]][max]
+cutoff = slot(evaluation, "x.values")[[1]][max]
+print(c(Accuracy = accuracy, Cutoff = cutoff))
+
+
+
+#New model using new cutoff w/ accuracy results
+pred_response_best = predict(m2, newdata=test,
+                           type="response")
+
+pred_response_best = ifelse(pred_response_best > cutoff, 1, 0)
+
+m2_table = table(Predicted = pred_response_best, Test = test$AMZN_response)
+m2_table
+
+
+m2_accuracy = sum(diag(m2_table)) / sum(m2_table)
+m2_accuracy
+
+
+#Using new best cutoff provides better accuracy & efficiency than using 0.5 to factor
+
+
+###Recall & precision 
+perf_df = data.frame(observed = factor(test$AMZN_response),
+pred = factor(pred_response_best))
+
+precision = precision(perf_df, observed, pred)
+recall = recall(perf_df, observed, pred)
+f1 = f_meas(perf_df, observed, pred)
+
+precision
+recall
+f1
+
+#Classification strength of 66%
+
+
+
+###ROC Curve & AUC
+
+roc_curve2 = prediction(pred_response_best, test$AMZN_response)
+
+
+roc_perf = performance(roc_curve, measure = "auc", x.measure = "cutoff")
+roc_perf@y.values[[1]] = round(roc_perf@y.values[[1]], digits = 
+                                 4)
+
+perf.rocr = performance(roc_curve, "tpr", "fpr")
+plot(perf.rocr, colorize=T, 
+     main = paste("AUC:", (roc_perf@y.values)))
+abline(a = 0, b = 1)
+
+#AUC = 0.6956
+
+###Naive Bayes model:
+
+
+x_train = train[,2:ncol(train)]
+x_test = test2[,2:ncol(test2)]
+
+y_train = train[,1]
+y_test = test2[,1]
+
+
+
+m_naivebayes = naiveBayes(x_train,y_train)
+
+#Predictions & model accuracy
+
+pred_response_bayes = predict(m_naivebayes,x_test)
+
+bayes_table = table(Predicted = pred_response_bayes, Test = y_test)
+bayes_table
+
+bayes_accuracy = sum(diag(bayes_table)) / sum(bayes_table)
+bayes_accuracy
+
+
+
+```
+
+
+```{r}
+###Creating indicator:
+
+indicator_df = dplyr::select(params_df, -date)
+
+m3 = stepAIC(glm(AMZN_response ~ ., family = binomial(), data = indicator_df))
+summary(m)
+
+indicator_df$indicator_strength = m3$fitted.values
+
+indicator_df = cbind(indicator_df, params_df$date)
+
+plot(x = indicator_df$`params_df$date`, y = indicator_df$indicator_strength, type = "l", main = "Stock Strength Indicator", xlab = "Date", ylab = "Strength")
+abline(h = mean(indicator_df$indicator_strength), col = "red")
+abline(h = cutoff, col = "purple")
+
+#Correlation between stock strength indicator & returns
+
+returns_amzn_corr = date_function(as.data.frame(returns_amzn))
+indicator_df$date = indicator_df$`params_df$date`
+corr_df = left_join(indicator_df, returns_amzn_corr, by = "date")
+
+cor.test(corr_df$indicator_strength, corr_df$Delt.0.arithmetic, 
+                    method = "pearson")
+
+#Significant correlation between stock strength indicator and daily returns
+
+```
+
+
+```{r}
+
+###Below is code that I did not end up using for the project:
+
+
+###PCA
+params_df_pca = dplyr::select(params_df, -date)
+params_matrix = data.matrix(params_df_pca)
+pr_out = prcomp(params_matrix,center=TRUE,scale=TRUE)
+plot(pr_out$x)
+plot(pr_out$sdev)
+eigenval = pr_out$sdev^2
+plot(cumsum(eigenval) / sum(eigenval), ylim = c(0,1))
+abline(h = .95)
+
+#W = pr_out$x[, 1:5]
+
+#plot(params_df$date, W[, 2])
+
+plot(pr_out$rotation[,1])
+abline(h=0)
+
+
+
+
+```
+
+
+
+
+
+
+
+```
+
